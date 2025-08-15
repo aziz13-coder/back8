@@ -1987,17 +1987,17 @@ class EnhancedTraditionalHoraryJudgmentEngine:
             reception_with_quesited = reception_quesited_data["type"] != "none"
             
             # Reception helps but is not absolutely required for translation
-            reception_bonus = 0
-            reception_note = ""
             reception_display = ""
-            
-            if reception_with_querent or reception_with_quesited:
+            reception_bonus = 0
+
+            if reception_with_querent:
+                reception_display = reception_querent_data["display_text"]
                 reception_bonus = 10
-                reception_note = " with reception"
-                if reception_with_querent:
-                    reception_display = reception_querent_data["display_text"]
-                elif reception_with_quesited:
-                    reception_display = reception_quesited_data["display_text"]
+            elif reception_with_quesited:
+                reception_display = reception_quesited_data["display_text"]
+                reception_bonus = 10
+
+            reception_note = " with reception" if reception_display else " without reception"
                 
             # Base confidence from traditional sources
             confidence = 65 + reception_bonus
@@ -2013,8 +2013,9 @@ class EnhancedTraditionalHoraryJudgmentEngine:
             favorable = True
             hard = {Aspect.SQUARE, Aspect.OPPOSITION}
             if (querent_aspect.aspect in hard) or (quesited_aspect.aspect in hard):
-                favorable = False  # Hard aspects make translation strained
                 confidence -= 5
+                if not reception_display:
+                    favorable = False  # Hard aspects without reception are unfavorable
             
             # Calculate validation metrics for transparency
             translator_speed = abs(pos.speed)
