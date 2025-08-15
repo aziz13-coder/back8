@@ -1,4 +1,7 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TraditionalHoraryQuestionAnalyzer:
@@ -155,14 +158,22 @@ class TraditionalHoraryQuestionAnalyzer:
         timeframe_analysis = self._parse_question_timeframe(question_lower)
         
         # Determine question type
-        question_type = self._determine_question_type(question_lower)
+        question_type, matched_keyword = self._determine_question_type(question_lower)
         
         # Determine primary houses involved (with house turning if needed)
         houses, possession_analysis = self._determine_houses(question_lower, question_type, third_person_analysis)
         
         # Determine significators
         significators = self._determine_significators(houses, question_type, possession_analysis, third_person_analysis)
-        
+
+        # Log analysis details
+        logger.info(
+            "Question type: %s, matched keyword: %s, quesited_house: %s",
+            question_type,
+            matched_keyword,
+            significators.get("quesited_house"),
+        )
+
         # DEBUG: Log education questions to find the bug
         if question_type == "education":
             print(f"DEBUG: Education Q='{question}' 3rdPerson={third_person_analysis} Houses={houses} QuesitedH={significators.get('quesited_house')}")
@@ -335,18 +346,24 @@ class TraditionalHoraryQuestionAnalyzer:
         
         return None
     
-    def _determine_question_type(self, question: str) -> str:
-        """Enhanced question type determination with transaction and possession priority"""
+    def _determine_question_type(self, question: str) -> Tuple[str, Optional[str]]:
+        """Enhanced question type determination with transaction and possession priority.
+
+        Returns:
+            tuple: Detected question category and the keyword that triggered the match.
+        """
         
         # PRIORITY 1: Financial transactions override relationship keywords
         transaction_words = ["sell", "buy", "purchase", "sale", "profit", "gain", "lose", "cost", "price", "payment", "trade", "exchange"]
-        if any(word in question for word in transaction_words):
-            return "money"
+        for word in transaction_words:
+            if word in question:
+                return "money", word
         
         # PRIORITY 2: Possession/property questions override person keywords  
         possession_words = ["car", "house", "vehicle", "property", "possessions", "belongings", "assets", "furniture", "jewelry", "valuables"]
-        if any(word in question for word in possession_words):
-            return "money"
+        for word in possession_words:
+            if word in question:
+                return "money", word
         
         # ENHANCED: Priority-based matching to handle overlapping keywords
         # Some words like "paralegal" contain "legal" but should match "education" not "lawsuit"
@@ -372,11 +389,11 @@ class TraditionalHoraryQuestionAnalyzer:
                 matches.append((q_type, matched_keywords))
         
         if not matches:
-            return "general"
+            return "general", None
             
         # If only one match, return it
         if len(matches) == 1:
-            return matches[0][0]
+            return matches[0][0], matches[0][1][0]
             
         # ENHANCED: Handle multiple matches with priority logic
         # Priority 1: Education keywords take precedence over legal when both match
@@ -394,14 +411,14 @@ class TraditionalHoraryQuestionAnalyzer:
             # Check for strong education indicators
             education_indicators = ["exam", "test", "student", "school", "college", "university", "pass", "graduate"]
             if any(indicator in question for indicator in education_indicators):
-                return "education"
+                return "education", education_match[1][0]
             # Check for strong legal indicators  
             legal_indicators = ["court", "lawsuit", "judge", "trial", "litigation", "case"]
             if any(indicator in question for indicator in legal_indicators):
-                return "lawsuit"
+                return "lawsuit", lawsuit_match[1][0]
         
         # Default: return the first match (maintains original behavior for other cases)
-        return matches[0][0]
+        return matches[0][0], matches[0][1][0]
     
     def _determine_houses(self, question: str, question_type: str, third_person_analysis: Dict = None) -> tuple:
         """ENHANCED: Determine houses using comprehensive traditional horary rules"""
