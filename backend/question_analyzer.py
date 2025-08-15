@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 
 class TraditionalHoraryQuestionAnalyzer:
@@ -32,7 +32,7 @@ class TraditionalHoraryQuestionAnalyzer:
             "funding": ["funding", "fund", "investment", "invest", "investor", "funding round", "seed", "series a", "series b", "venture capital", "vc", "angel", "capital", "raise money", "raise capital", "secure funding", "startup funding", "business loan", "finance", "financial backing", "sponsor", "grant", "equity", "valuation"],
             "money": ["money", "wealth", "rich", "profit", "gain", "debt", "financial", "income", "salary", "pay", "trading", "stock"],
             "career": ["job", "career", "work", "employment", "business", "promotion", "interview"],
-            "health": ["sick", "illness", "disease", "health", "recover", "die", "cure", "healing", "medical"],
+            "health": ["sick", "illness", "disease", "health", "recover", "cure", "healing", "medical"],
             "lawsuit": ["court", "lawsuit", "legal", "judge", "trial", "litigation", "case"],
             "relationship": ["love", "relationship", "friend", "enemy", "romance", "dating", "go out", "go out with", "date", "ask out", "see each other", "like me", "interested in", "attracted to", "reconciliation", "reconcile", "get back together", "ex", "former", "past relationship", "breakup", "break up", "makeup", "make up", "together", "couple", "partner", "boyfriend", "girlfriend", "romantic", "crush", "feelings", "attraction"],
             # NEW: Education and learning patterns
@@ -46,7 +46,9 @@ class TraditionalHoraryQuestionAnalyzer:
             # NEW: Death and inheritance
             "death": ["death", "die", "inheritance", "will", "testament", "legacy"],
             # NEW: Spiritual and religious
-            "spiritual": ["god", "religion", "spiritual", "prayer", "divine", "faith", "church"]
+            "spiritual": ["god", "religion", "spiritual", "prayer", "divine", "faith", "church"],
+            # NEW: General endings/cancellations
+            "general:ending": ["end", "ending", "cancel", "cancellation", "terminate"]
         }
         
         # Person keywords mapped to their traditional houses
@@ -154,21 +156,22 @@ class TraditionalHoraryQuestionAnalyzer:
         # ENHANCEMENT: Parse timeframe from question
         timeframe_analysis = self._parse_question_timeframe(question_lower)
         
-        # Determine question type
-        question_type = self._determine_question_type(question_lower)
-        
+        # Determine question type and matched keyword
+        question_type, matched_keyword = self._determine_question_type(question_lower)
+
         # Determine primary houses involved (with house turning if needed)
         houses, possession_analysis = self._determine_houses(question_lower, question_type, third_person_analysis)
-        
+
         # Determine significators
         significators = self._determine_significators(houses, question_type, possession_analysis, third_person_analysis)
-        
+
         # DEBUG: Log education questions to find the bug
         if question_type == "education":
             print(f"DEBUG: Education Q='{question}' 3rdPerson={third_person_analysis} Houses={houses} QuesitedH={significators.get('quesited_house')}")
-        
+
         return {
             "question_type": question_type,
+            "matched_keyword": matched_keyword,
             "relevant_houses": houses,
             "significators": significators,
             "third_person_analysis": third_person_analysis,
@@ -335,18 +338,18 @@ class TraditionalHoraryQuestionAnalyzer:
         
         return None
     
-    def _determine_question_type(self, question: str) -> str:
+    def _determine_question_type(self, question: str) -> Tuple[str, str]:
         """Enhanced question type determination with transaction and possession priority"""
         
         # PRIORITY 1: Financial transactions override relationship keywords
         transaction_words = ["sell", "buy", "purchase", "sale", "profit", "gain", "lose", "cost", "price", "payment", "trade", "exchange"]
         if any(word in question for word in transaction_words):
-            return "money"
+            return "money", None
         
         # PRIORITY 2: Possession/property questions override person keywords  
         possession_words = ["car", "house", "vehicle", "property", "possessions", "belongings", "assets", "furniture", "jewelry", "valuables"]
         if any(word in question for word in possession_words):
-            return "money"
+            return "money", None
         
         # ENHANCED: Priority-based matching to handle overlapping keywords
         # Some words like "paralegal" contain "legal" but should match "education" not "lawsuit"
@@ -372,11 +375,12 @@ class TraditionalHoraryQuestionAnalyzer:
                 matches.append((q_type, matched_keywords))
         
         if not matches:
-            return "general"
-            
+            return "general", None
+
         # If only one match, return it
         if len(matches) == 1:
-            return matches[0][0]
+            q_type, matched_keywords = matches[0]
+            return q_type, matched_keywords[0]
             
         # ENHANCED: Handle multiple matches with priority logic
         # Priority 1: Education keywords take precedence over legal when both match
@@ -394,14 +398,15 @@ class TraditionalHoraryQuestionAnalyzer:
             # Check for strong education indicators
             education_indicators = ["exam", "test", "student", "school", "college", "university", "pass", "graduate"]
             if any(indicator in question for indicator in education_indicators):
-                return "education"
+                return "education", education_match[1][0]
             # Check for strong legal indicators  
             legal_indicators = ["court", "lawsuit", "judge", "trial", "litigation", "case"]
             if any(indicator in question for indicator in legal_indicators):
-                return "lawsuit"
+                return "lawsuit", lawsuit_match[1][0]
         
         # Default: return the first match (maintains original behavior for other cases)
-        return matches[0][0]
+        q_type, matched_keywords = matches[0]
+        return q_type, matched_keywords[0]
     
     def _determine_houses(self, question: str, question_type: str, third_person_analysis: Dict = None) -> tuple:
         """ENHANCED: Determine houses using comprehensive traditional horary rules"""
@@ -529,7 +534,11 @@ class TraditionalHoraryQuestionAnalyzer:
         # NEW: Spiritual questions
         elif question_type == "spiritual":
             houses.append(9)  # 9th house = religion, spirituality, higher wisdom
-            
+
+        # NEW: General ending/cancellation questions behave like general queries
+        elif question_type == "general:ending":
+            houses.append(7)
+
         else:
             # Enhanced default logic - analyze question context
             if any(word in question for word in ["other", "they", "he", "she", "person", "someone"]):
@@ -538,7 +547,7 @@ class TraditionalHoraryQuestionAnalyzer:
                 houses.append(7)  # Default fallback
         
         # Look for specific house keywords (but not for general questions to avoid confusion)
-        if question_type != "general":
+        if question_type not in ("general", "general:ending"):
             for house, keywords in self.house_meanings.items():
                 if house not in houses and any(keyword in question for keyword in keywords):
                     houses.append(house)
